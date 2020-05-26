@@ -51,7 +51,7 @@ jobs:
           replicas:2
           image.repository:bishalcontainer1acr.azurecr.io/vipulakscluster
           image.tag:${{ github.sha }}
-          imagePullSecrets:[ "vipulaksclusdockerauth" ]
+          imagePullSecrets:vipulaksclusdockerauth
       id: bake
 
     - uses: azure/k8s-deploy@v1
