@@ -1,0 +1,65 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    
+    - uses: azure/docker-login@v1
+      with:
+        login-server: ajacr4.azurecr.io
+        username: ${{ secrets.acr_ajacr4_username }}
+        password: ${{ secrets.acr_ajacr4_password }}
+    
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t ajacr4.azurecr.io/vipulakscluster2:${{ github.sha }}
+        docker push ajacr4.azurecr.io/vipulakscluster2:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      with:
+         kubeconfig: ${{ secrets.aks_vipulakscluster2_kubeConfig }}
+      id: login
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep vipulakscluster256ab | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace vipulakscluster256ab`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: vipulakscluster256ab
+        container-registry-url: ajacr4.azurecr.io
+        container-registry-username: ${{ secrets.acr_ajacr4_username }}
+        container-registry-password: ${{ secrets.acr_ajacr4_password }}
+        secret-name: vipulaksclusdockerauth
+       
+    - uses: azure/k8s-bake@v1
+      with:
+        renderEngine: 'helm'
+        helmChart: sampleapp
+        releaseName: 'aks-helm-release'
+        helm-version: 'latest' 
+        silent: 'false'
+        overrideFiles: |
+          
+        overrides: |
+          replicas:2
+          image.repository:ajacr4.azurecr.io/vipulakscluster2
+          image.tag:${{ github.sha }}
+          imagePullSecrets:
+            -name:vipulaksclusdockerauth
+      id: bake
+
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: vipulakscluster256ab
+        manifests: ${{ steps.bake.outputs.manifestsBundle }}
+        images: |
+          ajacr4.azurecr.io/vipulakscluster2:${{ github.sha }}
+        imagepullsecrets: |
+          vipulaksclusdockerauth
