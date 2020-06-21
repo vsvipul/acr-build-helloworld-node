@@ -1,0 +1,78 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: actions/checkout@master
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az acr create -n diaggarwTst -g diaggarwTsta4bb-rg --location "South Central US" --sku Standard --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n diaggarwTst --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n diaggarwTst --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n diaggarwTst --query passwords[0].value | xargs`"
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: diaggarwtst.azurecr.io
+        username: ${{ steps.create-acr.outputs.acr_username }}
+        password: ${{ steps.create-acr.outputs.acr_password }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t diaggarwtst.azurecr.io/diaggarwaks:${{ github.sha }}
+        docker push diaggarwtst.azurecr.io/diaggarwaks:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      id: login
+      with:
+         kubeconfig: ${{ secrets.aks_diaggarwaks_kubeConfig }}
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep diaggarwaks4dab | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace diaggarwaks4dab`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: diaggarwaks4dab
+        container-registry-url: diaggarwtst.azurecr.io
+        container-registry-username: ${{ steps.create-acr.outputs.acr_username }}
+        container-registry-password: ${{ steps.create-acr.outputs.acr_password }}
+        secret-name: diaggarwaksdockerauth
+
+    - uses: azure/k8s-bake@v1
+      with:
+        renderEngine: 'helm'
+        helmChart: aks-helloworld
+        releaseName: 'aks-helm-release'
+        helm-version: 'latest' 
+        silent: 'false'
+        overrideFiles: |
+          /aks-helloworld/override-values.yaml
+        overrides: |
+          replicas:2
+          image.repository:diaggarwtst.azurecr.io/diaggarwaks
+          image.tag:${{ github.sha }}
+          imagePullSecrets:
+            -name:diaggarwaksdockerauth
+      id: bake
+
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: diaggarwaks4dab
+        manifests: ${{ steps.bake.outputs.manifestsBundle }}
+        images: |
+          diaggarwtst.azurecr.io/diaggarwaks:${{ github.sha }}
+        imagepullsecrets: |
+          diaggarwaksdockerauth
