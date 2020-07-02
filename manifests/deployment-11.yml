@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: "diaggarwaks-0938"
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: "diaggarwaks-0938"
+    spec:
+      containers:
+        - name: "diaggarwaks-0938"
+          image: "diaggarwtest.azurecr.io/diaggarwaks"
+          ports:
+          - containerPort: 80
