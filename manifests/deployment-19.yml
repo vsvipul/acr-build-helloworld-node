@@ -1,0 +1,16 @@
+apiVersion : apps/v1beta1
+kind: Deployment
+metadata:
+  name: "diaggarwtest-162c"
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: "diaggarwtest-162c"
+    spec:
+      containers:
+        - name: "diaggarwtest-162c"
+          image: "diaggarw.azurecr.io/diaggarwtest"
+          ports:
+          - containerPort: 80
