@@ -1,0 +1,65 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    
+    - uses: azure/docker-login@v1
+      with:
+        login-server: ddivanshu.azurecr.io
+        username: ${{ secrets.acr_ddivanshu_username }}
+        password: ${{ secrets.acr_ddivanshu_password }}
+    
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t ddivanshu.azurecr.io/diaggarw:${{ github.sha }}
+        docker push ddivanshu.azurecr.io/diaggarw:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      with:
+         kubeconfig: ${{ secrets.aks_diaggarw_kubeConfig }}
+      id: login
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep diaggarwd26f | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace diaggarwd26f`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: diaggarwd26f
+        container-registry-url: ddivanshu.azurecr.io
+        container-registry-username: ${{ secrets.acr_ddivanshu_username }}
+        container-registry-password: ${{ secrets.acr_ddivanshu_password }}
+        secret-name: diaggarwdockerauth
+       
+    - uses: azure/k8s-bake@v1
+      with:
+        renderEngine: 'helm'
+        helmChart: aks-helloworld
+        releaseName: 'aks-helm-release'
+        helm-version: 'latest' 
+        silent: 'false'
+        overrideFiles: |
+          
+        overrides: |
+          replicas:2
+          image.repository:ddivanshu.azurecr.io/diaggarw
+          image.tag:${{ github.sha }}
+          imagePullSecrets:
+            -name:diaggarwdockerauth
+      id: bake
+
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: diaggarwd26f
+        manifests: ${{ steps.bake.outputs.manifestsBundle }}
+        images: |
+          ddivanshu.azurecr.io/diaggarw:${{ github.sha }}
+        imagepullsecrets: |
+          diaggarwdockerauth
