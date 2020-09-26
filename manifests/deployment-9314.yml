@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: "diaggarw-453e"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: "diaggarw-453e"
+  template:
+    metadata:
+      labels:
+        app: "diaggarw-453e"
+    spec:
+      containers:
+        - name: "diaggarw-453e"
+          image: "ddivanshu.azurecr.io/diaggarw4d47"
+          ports:
+          - containerPort: 
