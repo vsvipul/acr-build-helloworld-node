@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: "diaggarwtest-2d58"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: "diaggarwtest-2d58"
+  template:
+    metadata:
+      labels:
+        app: "diaggarwtest-2d58"
+    spec:
+      containers:
+        - name: "diaggarwtest-2d58"
+          image: "ddivanshu.azurecr.io/diaggarwtest42dc"
+          ports:
+          - containerPort: 8080
