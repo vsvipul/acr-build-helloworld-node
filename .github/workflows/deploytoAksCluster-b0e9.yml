@@ -1,0 +1,50 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    
+    - uses: azure/docker-login@v1
+      with:
+        login-server: diaggarwtest.azurecr.io
+        username: ${{secrets.acr_diaggarwtest_username}}
+        password: ${{secrets.acr_diaggarwtest_password}}
+    
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/." -f  "Dockerfile" -t diaggarwtest.azurecr.io/diaggarw7435:${{github.sha}}
+        docker push diaggarwtest.azurecr.io/diaggarw7435:${{github.sha}}
+    
+    - uses: azure/k8s-set-context@v1
+      with:
+         kubeconfig: ${{secrets.aks_diaggarw_kubeConfig}}
+      id: login
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep diaggarwb0e9 | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace diaggarwb0e9`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: diaggarwb0e9
+        container-registry-url: diaggarwtest.azurecr.io
+        container-registry-username: ${{secrets.acr_diaggarwtest_username}}
+        container-registry-password: ${{secrets.acr_diaggarwtest_password}}
+        secret-name: diaggarwdockerauth
+       
+    - uses: azure/k8s-deploy@v1
+      with:
+        namespace: diaggarwb0e9
+        manifests: |
+          manifests/deployment-b0e9.yml
+          manifests/service-b0e9.yml
+        images: |
+          diaggarwtest.azurecr.io/diaggarw7435:${{github.sha}}
+        imagepullsecrets: |
+          diaggarwdockerauth
